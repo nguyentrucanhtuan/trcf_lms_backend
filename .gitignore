@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual env (re-create with `uv sync`)
+.venv/
+
+# Tooling cache
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Editor / agent
+.claude/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local SQLite DB (created at runtime by alembic upgrade)
+*.db
+*.db-journal
+
+# Runtime upload storage
+uploads/*
+!uploads/.gitkeep
+
+# Local env files
+.env
+.env.local
