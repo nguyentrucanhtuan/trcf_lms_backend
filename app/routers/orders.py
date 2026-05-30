@@ -130,7 +130,13 @@ def create_order(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Unknown course_ids: {sorted(missing)}",
         )
-    subtotal = sum(item.unit_price for item in payload.items)
+    course_by_id = {c.id: c for c in courses}
+    priced_items: list[tuple[int, int]] = []
+    for item in payload.items:
+        course = course_by_id[item.course_id]
+        unit_price = course.sale_price if course.sale_price is not None else course.price
+        priced_items.append((item.course_id, unit_price))
+    subtotal = sum(price for _, price in priced_items)
     discount_amount = 0
     coupon_obj: Coupon | None = None
     if payload.coupon_code:
@@ -147,8 +153,7 @@ def create_order(
         coupon_id=coupon_obj.id if coupon_obj else None,
     )
     order.items = [
-        OrderItem(course_id=item.course_id, unit_price=item.unit_price)
-        for item in payload.items
+        OrderItem(course_id=cid, unit_price=price) for cid, price in priced_items
     ]
     session.add(order)
     if coupon_obj is not None:
@@ -214,6 +219,36 @@ def mark_order_paid(
     order.payment_status = PaymentStatus.paid
     if provider_txn_id is not None:
         order.provider_txn_id = provider_txn_id
+    order.updated_at = utcnow()
+    _apply_paid_side_effects(session, order)
+    session.add(order)
+    session.commit()
+    session.refresh(order)
+    return order
+
+
+@router.post("/{order_id}/pay-mock", response_model=OrderPublic)
+def pay_order_mock(
+    order_id: int, session: SessionDep, current_user: CurrentUserDep
+) -> Order:
+    """Simulate a successful payment-gateway callback for the order owner.
+
+    No real gateway is integrated in this deployment, so the student confirms
+    payment directly. Marks the order paid and grants enrollment.
+    """
+    order = session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+    assert_acts_for_student(session, current_user, order.student_id)
+    if order.payment_status == PaymentStatus.paid:
+        return order
+    if order.payment_status in (PaymentStatus.refunded, PaymentStatus.cancelled):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot pay a {order.payment_status.value} order",
+        )
+    order.payment_status = PaymentStatus.paid
+    order.provider_txn_id = f"MOCK-{uuid.uuid4().hex[:12].upper()}"
     order.updated_at = utcnow()
     _apply_paid_side_effects(session, order)
     session.add(order)

@@ -192,7 +192,7 @@ def main() -> int:
         json={
             "student_id": 2,  # alice
             "payment_method_id": pm_id,
-            "items": [{"course_id": course_id, "unit_price": 2000000}],
+            "items": [{"course_id": course_id}],
             "coupon_code": "BARISTA25",
         },
         headers=H_ALICE,
@@ -202,14 +202,34 @@ def main() -> int:
     order_code = r.json()["order_code"]
     if r.status_code == 201:
         body = r.json()
-        ok = body["subtotal_amount"] == 2000000 and body["discount_amount"] == 500000 and body["total_amount"] == 1500000
+        # course has price=2000000, sale_price=1500000 → server uses sale_price
+        ok = body["subtotal_amount"] == 1500000 and body["discount_amount"] == 375000 and body["total_amount"] == 1125000
         print(f"  {'✓' if ok else '✗'} {'order amounts (subtotal/discount/total)':55s} → {body['subtotal_amount']}/{body['discount_amount']}/{body['total_amount']}")
         if ok:
             globals()["PASS"] += 1
         else:
             globals()["FAIL"] += 1
             failures.append(f"order amounts mismatch: {body}")
-    check("POST /orders/ alice for bob → 403", client.post("/orders/", json={"student_id": 3, "payment_method_id": pm_id, "items": [{"course_id": course_id, "unit_price": 1000}]}, headers=H_ALICE), 403)
+    # security: client-supplied unit_price must be ignored (server uses Course.price)
+    r2 = client.post(
+        "/orders/",
+        json={
+            "student_id": 2,
+            "payment_method_id": pm_id,
+            "items": [{"course_id": course_id, "unit_price": 0}],
+        },
+        headers=H_ALICE,
+    )
+    if r2.status_code == 201:
+        body2 = r2.json()
+        ok2 = body2["subtotal_amount"] == 1500000  # server still uses sale_price, ignoring client 0
+        print(f"  {'✓' if ok2 else '✗'} {'order ignores client unit_price=0':55s} → subtotal {body2['subtotal_amount']}")
+        if ok2:
+            globals()["PASS"] += 1
+        else:
+            globals()["FAIL"] += 1
+            failures.append(f"client unit_price exploit succeeded: {body2}")
+    check("POST /orders/ alice for bob → 403", client.post("/orders/", json={"student_id": 3, "payment_method_id": pm_id, "items": [{"course_id": course_id}]}, headers=H_ALICE), 403)
     check("GET /orders/ alice (forced filter)", client.get("/orders/", headers=H_ALICE), 200)
     check("GET /orders/{id} alice self", client.get(f"/orders/{order_id}", headers=H_ALICE), 200)
     check("GET /orders/{id} bob other → 403", client.get(f"/orders/{order_id}", headers=H_BOB), 403)

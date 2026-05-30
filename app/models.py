@@ -438,7 +438,6 @@ class OrderItem(SQLModel, table=True):
 
 class OrderItemCreate(SQLModel):
     course_id: int
-    unit_price: int = Field(ge=0)
 
 
 class OrderItemPublic(SQLModel):

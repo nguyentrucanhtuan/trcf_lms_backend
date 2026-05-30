@@ -116,6 +116,9 @@ def register(request: Request, payload: RegisterRequest, session: SessionDep) ->
         role=UserRole.student,
         is_active=True,
         password_hash=hash_password(payload.password),
+        # No email-sending infra in this deployment: auto-verify self-registered
+        # students so they can immediately purchase and enroll.
+        email_verified_at=utcnow(),
     )
     session.add(user)
     try:

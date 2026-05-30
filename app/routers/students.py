@@ -45,6 +45,20 @@ def list_students(
     return paginate(session, statement, offset, limit)
 
 
+@router.get("/me", response_model=StudentPublic)
+def get_my_student(session: SessionDep, current_user: CurrentUserDep) -> Student:
+    """Return the Student profile of the currently authenticated user."""
+    student = session.exec(
+        select(Student).where(Student.user_id == current_user.id)
+    ).first()
+    if student is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No student profile for this account",
+        )
+    return student
+
+
 @router.get("/{student_id}", response_model=StudentPublic)
 def get_student(
     student_id: int, session: SessionDep, current_user: CurrentUserDep
