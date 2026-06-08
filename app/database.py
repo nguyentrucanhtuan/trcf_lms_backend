@@ -1,3 +1,4 @@
+import os
 from collections.abc import Generator
 from pathlib import Path
 from typing import Annotated
@@ -7,7 +8,9 @@ from sqlalchemy import event
 from sqlmodel import Session, create_engine
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = BACKEND_DIR / "lms.db"
+# DB_PATH is configurable so the SQLite file can live on a persistent volume.
+DB_PATH = Path(os.environ.get("DB_PATH") or (BACKEND_DIR / "lms.db"))
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 SQLITE_URL = f"sqlite:///{DB_PATH}"
 
 engine = create_engine(

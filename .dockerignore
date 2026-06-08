@@ -1,0 +1,16 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+lms.db
+*.db
+*.sqlite3
+.env
+.git
+.gitignore
+uploads
+tests
+.DS_Store

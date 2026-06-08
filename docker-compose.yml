@@ -1,0 +1,52 @@
+# TRCF LMS deployment reference.
+# Expected layout (as on the server, e.g. ~/trcf-lms/):
+#   <deploy-root>/
+#     ├─ backend/           <- this repo (trcf_lms_backend)
+#     ├─ frontend/          <- the trcf_lms_frontend repo, cloned as a sibling
+#     ├─ docker-compose.yml <- copy of THIS file, placed at the deploy root
+#     └─ .env               <- from .env.example, with real values
+# Build contexts below (./backend, ./frontend) resolve from the deploy root.
+# Bring up with:  docker compose up -d --build
+name: trcf-lms
+
+services:
+  backend:
+    build:
+      context: ./backend
+    image: trcf-lms-backend:latest
+    container_name: trcf-lms-backend
+    restart: unless-stopped
+    environment:
+      DB_PATH: /data/lms.db
+      UPLOAD_DIR: /data/uploads
+      AUTO_MIGRATE: "true"
+      RATE_LIMIT_ENABLED: "true"
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      FRONTEND_URL: ${FRONTEND_URL}
+    volumes:
+      - trcf_data:/data
+    ports:
+      - "${BIND_ADDR:-0.0.0.0}:${BACKEND_PORT:-8765}:8765"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8765/docs').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    image: trcf-lms-frontend:latest
+    container_name: trcf-lms-frontend
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDR:-0.0.0.0}:${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - backend
+
+volumes:
+  trcf_data:
