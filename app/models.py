@@ -50,6 +50,20 @@ class EnrollmentStatus(str, Enum):
     completed = "completed"
 
 
+class VideoType(str, Enum):
+    """How a lesson's video_url should be interpreted by the player.
+
+    ``auto`` detects the provider from the URL; the others force a provider
+    so the player builds the correct embed even for unusual URL formats.
+    """
+
+    auto = "auto"
+    youtube = "youtube"
+    vimeo = "vimeo"
+    drive = "drive"
+    file = "file"
+
+
 class PaymentStatus(str, Enum):
     pending = "pending"
     paid = "paid"
@@ -296,6 +310,7 @@ class LessonBase(SQLModel):
     title: str = Field(max_length=255)
     content: str | None = None
     video_url: str | None = Field(default=None, max_length=1000)
+    video_type: VideoType = VideoType.auto
     duration_minutes: int | None = Field(default=None, ge=0)
     position: int = 0
     is_preview: bool = False
@@ -324,6 +339,7 @@ class LessonUpdate(SQLModel):
     title: str | None = None
     content: str | None = None
     video_url: str | None = None
+    video_type: VideoType | None = None
     duration_minutes: int | None = None
     position: int | None = None
     is_preview: bool | None = None
