@@ -22,6 +22,14 @@ from app.utils import utcnow
 router = APIRouter(prefix="/students", tags=["students"])
 
 
+def _with_email(session: SessionDep, student: Student) -> StudentPublic:
+    """Serialize a Student with the email of its linked login account."""
+    user = session.get(User, student.user_id)
+    return StudentPublic(
+        **student.model_dump(), email=user.email if user else None
+    )
+
+
 @router.get("/", response_model=Page[StudentPublic], dependencies=ADMIN_DEP)
 def list_students(
     session: SessionDep,
@@ -29,7 +37,7 @@ def list_students(
     status_filter: Annotated[StudentStatus | None, Query(alias="status")] = None,
     user_id: Annotated[int | None, Query()] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 50,
 ) -> dict:
     statement = select(Student)
     if q:
@@ -42,7 +50,22 @@ def list_students(
     if user_id is not None:
         statement = statement.where(Student.user_id == user_id)
     statement = statement.order_by(Student.id.desc())
-    return paginate(session, statement, offset, limit)
+    page = paginate(session, statement, offset, limit)
+    # Join login emails in one query to avoid N+1.
+    students: list[Student] = page["items"]
+    emails: dict[int, str] = {}
+    if students:
+        rows = session.exec(
+            select(User.id, User.email).where(
+                User.id.in_([s.user_id for s in students])
+            )
+        ).all()
+        emails = {uid: email for uid, email in rows}
+    page["items"] = [
+        StudentPublic(**s.model_dump(), email=emails.get(s.user_id))
+        for s in students
+    ]
+    return page
 
 
 @router.get("/me", response_model=StudentPublic)
@@ -56,7 +79,7 @@ def get_my_student(session: SessionDep, current_user: CurrentUserDep) -> Student
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No student profile for this account",
         )
-    return student
+    return StudentPublic(**student.model_dump(), email=current_user.email)
 
 
 @router.get("/{student_id}", response_model=StudentPublic)
@@ -67,7 +90,7 @@ def get_student(
     student = session.get(Student, student_id)
     if student is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
-    return student
+    return _with_email(session, student)
 
 
 @router.post("/", response_model=StudentPublic, status_code=status.HTTP_201_CREATED, dependencies=ADMIN_DEP)
@@ -94,7 +117,7 @@ def create_student(payload: StudentCreate, session: SessionDep) -> Student:
             detail="student_code already exists or user already has a student profile",
         )
     session.refresh(student)
-    return student
+    return _with_email(session, student)
 
 
 @router.patch("/{student_id}", response_model=StudentPublic, dependencies=ADMIN_DEP)
@@ -118,7 +141,7 @@ def update_student(
             detail="student_code already exists",
         )
     session.refresh(student)
-    return student
+    return _with_email(session, student)
 
 
 @router.delete("/{student_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=ADMIN_DEP)

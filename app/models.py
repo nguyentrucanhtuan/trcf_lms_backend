@@ -137,6 +137,8 @@ class StudentUpdate(SQLModel):
 class StudentPublic(StudentBase):
     id: int
     user_id: int
+    # Email of the linked login account (User). Joined in the students router.
+    email: str | None = None
     created_at: datetime
     updated_at: datetime
 
